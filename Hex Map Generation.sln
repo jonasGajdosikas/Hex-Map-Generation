@@ -1,0 +1,37 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.31515.178
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CoordLib", "CoordLib\CoordLib.csproj", "{E05E60D0-728E-4CA3-8149-69EEF2DB9B30}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Program", "Program\Program.csproj", "{5A30E008-BD08-493C-85BD-72C97D566721}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GridLib", "GridLib\GridLib.csproj", "{2D231695-6544-4F9B-8F36-63B7AC55F231}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{E05E60D0-728E-4CA3-8149-69EEF2DB9B30}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E05E60D0-728E-4CA3-8149-69EEF2DB9B30}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E05E60D0-728E-4CA3-8149-69EEF2DB9B30}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E05E60D0-728E-4CA3-8149-69EEF2DB9B30}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5A30E008-BD08-493C-85BD-72C97D566721}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5A30E008-BD08-493C-85BD-72C97D566721}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5A30E008-BD08-493C-85BD-72C97D566721}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5A30E008-BD08-493C-85BD-72C97D566721}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2D231695-6544-4F9B-8F36-63B7AC55F231}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2D231695-6544-4F9B-8F36-63B7AC55F231}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2D231695-6544-4F9B-8F36-63B7AC55F231}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2D231695-6544-4F9B-8F36-63B7AC55F231}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {EAE5109B-37AC-4A36-8794-9A1887293320}
+	EndGlobalSection
+EndGlobal
