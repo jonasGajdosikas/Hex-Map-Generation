@@ -49,7 +49,7 @@ namespace GridLibrary
             return new Coord
             {
                 X = _x / 2,
-                Y = (_y - (_x % 4) / 2) / 2
+                Y = (_y - ((_x % 4 > 1) ? 1 : 0)) / 2
             };
         }
         public Bitmap Graphics()

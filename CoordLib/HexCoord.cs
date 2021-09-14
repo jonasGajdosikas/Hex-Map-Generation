@@ -7,18 +7,22 @@ namespace coordLibrary
     {
         public int X;
         public int Y;
-        public float PosY() { return (float)Y + (X % 2) / 2f; }
-        public float PosX() { return HexW * (float)X; }
-        public const float HexW = 0.866f;
+        public int Z => 0 - X - Y;
+        public double PosY => (double)Y + (X % 2) / 2f;
+        public double PosX => HexW * (double)X;
+        public const double HexW = 0.866025403784438646763;
+        public Coord Cubic => new(X, Y - X / 2);
+        public Coord InGrid => new(X, Y + X / 2);
+        public Coord ToPixel => new(X * 2, Y * 2 + X % 2);
         public Coord(int _x, int _y)
         {
             X = _x;
             Y = _y;
         }
-        public Coord(float radius, float angle)
+        public Coord(double radius, double angle)
         {
-            float pX = (float)Math.Floor(radius * Math.Cos(angle));
-            float pY = (float)Math.Floor(radius * Math.Sin(angle));
+            double pX = Math.Floor(radius * Math.Cos(angle));
+            double pY = Math.Floor(radius * Math.Sin(angle));
             X = (int)Math.Round(pX / HexW);
             Y = (int)Math.Round(pY + ((X % 2 == 1) ? 0.5f : 0f));
         }
@@ -27,9 +31,7 @@ namespace coordLibrary
             X = 0;
             Y = 0;
         }
-        public Coord[] Neighbors()
-        {
-            return new Coord[]
+        public Coord[] Neighbors => new Coord[]
             {
                 new Coord(X, Y - 1),
                 new Coord(X + 1, Y - 1 + (X % 2)),
@@ -38,26 +40,25 @@ namespace coordLibrary
                 new Coord(X - 1, Y + (X % 2)),
                 new Coord(X + 1, Y - 1 + (X % 2))
             };
-        }
-        public static float DotProduct(Coord first, Coord second)
+        
+        public static double DotProduct(Coord first, Coord second)
         {
             return first.Dot(second);
         }
-        public static float CrossProduct(Coord first, Coord second)
+        public static double CrossProduct(Coord first, Coord second)
         {
             return first.Cross(second);
         }
         public int DistHex(Coord other)
         {
-            int dx = this.X - other.X;
-            int dy = (this.Y - this.X / 2) - (other.Y - other.X / 2);
-            return Math.Max(Math.Abs(dx + dy), Math.Max(Math.Abs(dx), Math.Abs(dy)));
+            Coord diff = this.Cubic - other.Cubic;
+            return (Math.Abs(diff.X) + Math.Abs(diff.Y) + Math.Abs(diff.Z)) / 2;
         }
-        public float DistDir(Coord other)
+        public double DistDir(Coord other)
         {
-            float dx = this.PosX() - other.PosX();
-            float dy = this.PosY() - other.PosY();
-            return (float)Math.Sqrt(dx * dx + dy * dy);
+            double dx = this.PosX - other.PosX;
+            double dy = this.PosY - other.PosY;
+            return Math.Sqrt(dx * dx + dy * dy);
         }
         public Coord Interpolate(Coord other, int percentage)
         {
@@ -167,14 +168,17 @@ namespace coordLibrary
             return left.Equals(right);
         }
         public static bool operator !=(Coord left, Coord right) => !(left == right);
-
-        public float Dot(Coord other)
+        public override string ToString()
         {
-            return this.PosX() * other.PosX() + this.PosY() * other.PosY();
+            return "(" + X.ToString() + "," + Y.ToString() + ")";
         }
-        public float Cross(Coord other)
+        public double Dot(Coord other)
         {
-            return this.PosX() * other.PosY() - other.PosX() * this.PosY();
+            return this.PosX * other.PosX + this.PosY * other.PosY;
+        }
+        public double Cross(Coord other)
+        {
+            return this.PosX * other.PosY - other.PosX * this.PosY;
         }
     }
 }
