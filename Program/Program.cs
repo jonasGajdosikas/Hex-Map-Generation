@@ -14,7 +14,7 @@ namespace Program
             int width = 120;
             int height = 100;
             HexGrid grid = new(width, height);
-            grid.GenerateVoronoiRooms(40, 6, 30);
+            grid.GenerateVoronoiRooms(40, 8, 0.7f, 50);
             grid.Export("output//Map.png");
             /**
             grid.MakeCaverns(51, 4, 8);
@@ -288,6 +288,10 @@ namespace Program
             public VoronoiPoint Origin;
             public List<Coord> tiles;
             public List<Coord> borderTiles;
+            public int parent;
+            public List<int> children;
+            public int depth;
+            public List<int> neighbors;
             public bool isBorder;
             public VoronoiCell(int[,] tilemap, VoronoiPoint _origin, List<Coord> _tiles)
             {
@@ -295,6 +299,8 @@ namespace Program
                 tiles = _tiles;
                 borderTiles = new();
                 isBorder = false;
+                children = new();
+                neighbors = new();
                 foreach (Coord tile in tiles)
                 {
                     foreach (Coord neighbor in tile.Neighbors)
@@ -303,6 +309,7 @@ namespace Program
                         {
                             if (!isBorder && tilemap[neighbor.X, neighbor.Y] == -1) isBorder = true;
                             borderTiles.Add(tile);
+                            if (!neighbors.Contains(tilemap[neighbor.X, neighbor.Y])) neighbors.Add(tilemap[neighbor.X, neighbor.Y]);
                             break;
                         }
                     }
@@ -311,32 +318,20 @@ namespace Program
         }
         public List<VoronoiCell> voronoiCells;
         public List<VoronoiPoint> voronoiPoints;
-        public void GenerateVoronoiRooms(int centerRadius, float pointDistance, int maxTries) {
+        public void GenerateVoronoiRooms(int centerRadius, float pointDistance, float maxDistIncrease, int maxTries) {
             for (int x = 0; x < width; x++) for (int y = 0; y < height; y++) this[x, y] = 1;
             int[,] cells = new int[width, height];
             for (int x = 0; x < width; x++) for (int y = 0; y < height; y++) cells[x, y] = -1;
-            voronoiPoints = GenerateVoronoiPoints(centerRadius, pointDistance, maxTries);
-            Console.WriteLine("Generated {0} points", voronoiPoints.Count);
+            voronoiPoints = GenerateVoronoiPoints(centerRadius, pointDistance, maxDistIncrease, maxTries);
+            //make Voronoi cells out of the points
+            //determine belonging of each coord
             Coord center = voronoiPoints[0].position;
-            for (int x = center.X - centerRadius; x < center.X + centerRadius; x++)
-            {
-                for (int y = center.Y - centerRadius; y < center.Y + centerRadius; y++)
-                {
-                    if (center.DistHex(new(x, y)) > centerRadius) continue;
-                    int closestPointID = 0;
-                    for (int i = 1; i < voronoiPoints.Count; i++)
-                    {
-                        closestPointID = CloserOfTwo(new(x, y), voronoiPoints[closestPointID], voronoiPoints[i]);
-                    }
-                    cells[x, y] = closestPointID;
-                }
-            }
             List<Coord>[] tileLists = new List<Coord>[voronoiPoints.Count];
             for (int i = 0; i < voronoiPoints.Count; i++) tileLists[i] = new();
-            Console.WriteLine("determined closest points");
-            for (int x = center.X - centerRadius; x < center.X + centerRadius; x++)
+            //make lists of coords according to the cells
+            for (int x = center.X - centerRadius; x <= center.X + centerRadius; x++)
             {
-                for (int y = center.Y - centerRadius; y < center.Y + centerRadius; y++)
+                for (int y = center.Y - centerRadius; y <= center.Y + centerRadius; y++)
                 {
                     if (center.DistHex(new(x, y)) > centerRadius) continue;
                     int closestPointID = 0;
@@ -348,45 +343,76 @@ namespace Program
                     tileLists[closestPointID].Add(new Coord(x, y));
                 }
             }
-            Console.WriteLine("made tile lists");
+            //define the cells based on the found tiles
             voronoiCells = new();
             for (int i = 0; i < voronoiPoints.Count; i++)
             {
                 voronoiCells.Add(new(cells, voronoiPoints[i], tileLists[i]));
             }
-            Console.WriteLine("determined cells");
+            //fill cells in with empty
             foreach (VoronoiCell cell in voronoiCells)
             {
-                //if (cell.isBorder) continue;
-                foreach (Coord tile in cell.tiles) 
+                if (cell.isBorder) continue;
+                foreach (Coord tile in cell.tiles)
                 {
                     this[tile] = 0;
                     addedToRegion[tile.X, tile.Y] = true;
                 }
                 foreach (Coord borderTile in cell.borderTiles) this[borderTile] = 1;
             }
-            Console.WriteLine("emptied rooms");
-            foreach (VoronoiPoint point in voronoiPoints)
-            {
-                foreach(int childID in point.children)
+
+            //pathways
+            voronoiCells[0].parent = -1;
+            voronoiCells[0].depth = 0;
+            for (int j = 0; j < voronoiCells.Count; j++){
+                for (int i = 1; i < voronoiCells.Count; i++)
                 {
-                    DrawLine(point.position, voronoiPoints[childID].position, 0);
+                    int minDepth = -1;
+                    int mdnID = -1;
+                    foreach (int nID in voronoiCells[i].neighbors)
+                    {
+                        if (nID == -1) continue;
+                        if (minDepth > voronoiCells[i].depth + 1 || (minDepth == -1 && voronoiCells[i].depth != -1))
+                        {
+                            minDepth = voronoiCells[i].depth + 1;
+                            mdnID = nID;
+                        }
+                    }
+                    voronoiCells[i].depth = minDepth;
+                    voronoiCells[i].parent = mdnID;
+                    if (j == voronoiCells.Count - 1) voronoiCells[mdnID].children.Add(i);
+                }
+            }
+
+            foreach (VoronoiCell cell in voronoiCells)
+            {
+                foreach(int childID in cell.children)
+                {
+                    DrawLine(cell.Origin.position, voronoiPoints[childID].position, 0);
+                    //Console.WriteLine("Drew line from {0} to {1}", point.position, voronoiPoints[childID].position);
                 }
             }
             Console.WriteLine("made pathways");
         }
-        public List<VoronoiPoint> GenerateVoronoiPoints(int maxDist, float distBetween, int maxTries)
+        public List<VoronoiPoint> GenerateVoronoiPoints(int maxDist, float distBetween, float maxDistIncrease, int maxTries)
         {
             bool[,] closeToPoint = new bool[width, height];
             VoronoiPoint StartPoint = new(new(width / 2, height / 2), 0, -1, 0);
             List<VoronoiPoint> PointList = new();
             PointList.Add(StartPoint);
+            for (int x = StartPoint.position.X - (int)distBetween; x < StartPoint.position.X + distBetween; x++)
+            {
+                for (int y = StartPoint.position.Y - (int)distBetween; y < StartPoint.position.Y + distBetween; y++)
+                {
+                    if (StartPoint.position.DistDir(new(x, y)) < distBetween) closeToPoint[x, y] = true;
+                }
+            }
             closeToPoint[StartPoint.position.X, StartPoint.position.Y] = true;
             int fails = 0;
-            while(fails < maxTries + PointList.Count)
+            while(fails < maxTries)
             {
                 VoronoiPoint from = PointList[rand.Next(PointList.Count)];
-                double radius = (rand.NextDouble() + 1) * (distBetween);
+                double radius = (rand.NextDouble() * maxDistIncrease + 1) * (distBetween);
                 double angle = rand.NextDouble() * Math.PI * 2;
                 Coord next = (from.position.Cubic + new Coord(radius, angle).Cubic).InGrid;
                 bool invalidPoint = closeToPoint[next.X, next.Y] || (next.DistHex(StartPoint.position) > maxDist);
@@ -401,8 +427,11 @@ namespace Program
                         }
                     }
                     VoronoiPoint voronoiPoint = new(next, PointList.Count, from.ID, from.level + 1);
+                    PointList[from.ID].children.Add(PointList.Count);
                     PointList.Add(voronoiPoint);
+                    fails = 0;
                 }
+
             }
             return PointList;
         }
