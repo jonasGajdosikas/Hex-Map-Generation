@@ -38,7 +38,7 @@ namespace coordLibrary
                 new Coord(X + 1, Y + (X % 2)),
                 new Coord(X, Y + 1),
                 new Coord(X - 1, Y + (X % 2)),
-                new Coord(X + 1, Y - 1 + (X % 2))
+                new Coord(X - 1, Y - 1 + (X % 2))
             };
         
         public static double DotProduct(Coord first, Coord second)

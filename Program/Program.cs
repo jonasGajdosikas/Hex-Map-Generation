@@ -11,12 +11,10 @@ namespace Program
         static void Main()
         {
             
-            int width = 120;
-            int height = 100;
+            int width = 180;
+            int height = 150;
             HexGrid grid = new(width, height);
-            grid.GenerateVoronoiRooms(40, 8, 0.7f, 50);
-            grid.Export("output//Map.png");
-            /**
+            grid.GenerateVoronoiRooms(60, 10, 1f, 50);
             grid.MakeCaverns(51, 4, 8);
             grid.Export("output//Map.png");
             /****/
@@ -55,7 +53,7 @@ namespace Program
             {
                 Smooth();
             }
-            Export("output//SmoothedMap.png");
+            //Export("output//SmoothedMap.png");
             //find all regions; remove small ones; then connect the remaining ones
             List<Region> roomRegions = GetRegionsOfType(0);
             List<List<Region>> bigRooms = new();
@@ -73,6 +71,9 @@ namespace Program
                     bigRooms.Add(new List<Region> { room });
                 }
             }
+
+            //TODO: connect inner cell rooms with each other and make connections with outside
+            //will do this operation in make voronoi rooms
             ConnectAllRegions(bigRooms);
         }
         public void Smooth()
@@ -93,6 +94,7 @@ namespace Program
             {
                 for (int y = 0; y < height; y++)
                 {
+                    if (addedToRegion[x, y]) continue;
                     if (neighbors[x, y] < 3) this[x, y] = 0;
                     else if (neighbors[x, y] > 3) this[x, y] = 1;
                 }
@@ -160,10 +162,19 @@ namespace Program
         {
             public List<Coord> tiles;
             public List<Coord> edgeTiles;
-            public Region(List<Coord> _tiles, List<Coord> _edgeTiles)
+            public bool isVoronoi;
+            public int cellID;
+            public Region(List<Coord> _tiles, List<Coord> _edgeTiles, bool _isVoronoi = false, int _cellID = -1)
             {
                 tiles = _tiles;
                 edgeTiles = _edgeTiles;
+                isVoronoi = _isVoronoi;
+                if (isVoronoi) cellID = _cellID;
+            }
+            public Region()
+            {
+                tiles = new();
+                edgeTiles = new();
             }
         }
         public void ConnectAllRegions(List<List<Region>> ClustersToConnect)
@@ -173,6 +184,7 @@ namespace Program
                 int bestDistance = -1;
                 bool connectionFound = false;
                 List<Region> bestClusterA = new(), bestClusterB = new();
+                Region BRA = new(), BRB = new();
                 Coord bestTileA = new(), bestTileB = new();
                 for (int cA = 0; cA < ClustersToConnect.Count; cA++)
                 {
@@ -193,6 +205,8 @@ namespace Program
                                         {
                                             bestClusterA = clusterA;
                                             bestClusterB = clusterB;
+                                            BRA = roomA;
+                                            BRB = roomB;
                                             bestTileA = tileA;
                                             bestTileB = tileB;
                                             bestDistance = distanceBetweenRooms;
@@ -211,6 +225,11 @@ namespace Program
                     bestClusterA.AddRange(bestClusterB);
                     ClustersToConnect.Add(bestClusterA);
                     DrawLine(bestTileA, bestTileB);
+                    if (BRA.isVoronoi && BRB.isVoronoi)
+                    {
+                        voronoiCells[BRA.cellID].neighbors.Add(BRB.cellID);
+                        voronoiCells[BRB.cellID].neighbors.Add(BRA.cellID);
+                    }
                 }
             }
         }
@@ -288,10 +307,8 @@ namespace Program
             public VoronoiPoint Origin;
             public List<Coord> tiles;
             public List<Coord> borderTiles;
-            public int parent;
-            public List<int> children;
-            public int depth;
             public List<int> neighbors;
+            public List<int> borderLenths;
             public bool isBorder;
             public VoronoiCell(int[,] tilemap, VoronoiPoint _origin, List<Coord> _tiles)
             {
@@ -299,8 +316,8 @@ namespace Program
                 tiles = _tiles;
                 borderTiles = new();
                 isBorder = false;
-                children = new();
                 neighbors = new();
+                borderLenths = new();
                 foreach (Coord tile in tiles)
                 {
                     foreach (Coord neighbor in tile.Neighbors)
@@ -315,6 +332,24 @@ namespace Program
                     }
                 }
             }
+            public int SharedBorderLength(int[,] tilemap, VoronoiCell other)
+            {
+                int otherID = other.Origin.ID;
+                if (!neighbors.Contains(otherID)) return 0;
+                int count = 0;
+                foreach (Coord tile in borderTiles)
+                {
+                    foreach (Coord neighbor in tile.Neighbors)
+                    {
+                        if (tilemap[neighbor.X, neighbor.Y] == otherID)
+                        {
+                            count++;
+                            break;
+                        }
+                    }
+                }
+                return count;
+            }
         }
         public List<VoronoiCell> voronoiCells;
         public List<VoronoiPoint> voronoiPoints;
@@ -322,7 +357,7 @@ namespace Program
             for (int x = 0; x < width; x++) for (int y = 0; y < height; y++) this[x, y] = 1;
             int[,] cells = new int[width, height];
             for (int x = 0; x < width; x++) for (int y = 0; y < height; y++) cells[x, y] = -1;
-            voronoiPoints = GenerateVoronoiPoints(centerRadius, pointDistance, maxDistIncrease, maxTries);
+            voronoiPoints = PoissantSamplePoints(centerRadius, pointDistance, maxDistIncrease, maxTries);
             //make Voronoi cells out of the points
             //determine belonging of each coord
             Coord center = voronoiPoints[0].position;
@@ -358,43 +393,64 @@ namespace Program
                     this[tile] = 0;
                     addedToRegion[tile.X, tile.Y] = true;
                 }
-                foreach (Coord borderTile in cell.borderTiles) this[borderTile] = 1;
-            }
-
-            //pathways
-            voronoiCells[0].parent = -1;
-            voronoiCells[0].depth = 0;
-            for (int j = 0; j < voronoiCells.Count; j++){
-                for (int i = 1; i < voronoiCells.Count; i++)
+                foreach (Coord borderTile in cell.borderTiles)
                 {
-                    int minDepth = -1;
-                    int mdnID = -1;
-                    foreach (int nID in voronoiCells[i].neighbors)
+                    this[borderTile] = 1;
+                    foreach (Coord neighbor in borderTile.Neighbors)
                     {
-                        if (nID == -1) continue;
-                        if (minDepth > voronoiCells[i].depth + 1 || (minDepth == -1 && voronoiCells[i].depth != -1))
-                        {
-                            minDepth = voronoiCells[i].depth + 1;
-                            mdnID = nID;
-                        }
+                        addedToRegion[neighbor.X, neighbor.Y] = true;
                     }
-                    voronoiCells[i].depth = minDepth;
-                    voronoiCells[i].parent = mdnID;
-                    if (j == voronoiCells.Count - 1) voronoiCells[mdnID].children.Add(i);
                 }
             }
-
             foreach (VoronoiCell cell in voronoiCells)
             {
-                foreach(int childID in cell.children)
+                foreach (int neighborID in cell.neighbors)
                 {
-                    DrawLine(cell.Origin.position, voronoiPoints[childID].position, 0);
-                    //Console.WriteLine("Drew line from {0} to {1}", point.position, voronoiPoints[childID].position);
+                    if (neighborID == -1) cell.borderLenths.Add(0);
+                    else cell.borderLenths.Add(cell.SharedBorderLength(cells, voronoiCells[neighborID]));
                 }
             }
-            Console.WriteLine("made pathways");
+            //modified room connection algorithm to connect by longest shared border
+            List<List<int>> cellClusters = new();
+            for (int i = 0; i < voronoiCells.Count; i++)
+            {
+                cellClusters.Add(new List<int> { i });
+            }
+            while(cellClusters.Count > 1)
+            {
+                List<int> bestClusterA = new(), bestClusterB = new();
+                int bestCellAID = 0, bestCellBID = 0, bestSharedBorder = -1;
+                foreach(List<int> cluster in cellClusters)
+                {
+                    foreach(int cell in cluster)
+                    {
+                        for (int i = 0; i < voronoiCells[cell].neighbors.Count; i++)
+                        {
+                            int neighborCell = voronoiCells[cell].neighbors[i];
+                            if (neighborCell == -1 || cluster.Contains(neighborCell)) continue;
+                            if (bestSharedBorder < voronoiCells[cell].borderLenths[i])
+                            {
+                                bestClusterA = cluster;
+                                bestCellAID = cell;
+                                bestCellBID = neighborCell;
+                                bestSharedBorder = voronoiCells[cell].borderLenths[i];
+                                foreach (List<int> clusterB in cellClusters) if (clusterB.Contains(neighborCell)) { bestClusterB = clusterB; break; }
+                            }
+                        }
+                    }
+                }
+                if (bestSharedBorder != -1)
+                {
+                    cellClusters.Remove(bestClusterA);
+                    cellClusters.Remove(bestClusterB);
+                    bestClusterA.AddRange(bestClusterB);
+                    cellClusters.Add(bestClusterA);
+                    DrawLine(voronoiCells[bestCellAID].Origin.position, voronoiCells[bestCellBID].Origin.position);
+                }
+            }
+
         }
-        public List<VoronoiPoint> GenerateVoronoiPoints(int maxDist, float distBetween, float maxDistIncrease, int maxTries)
+        public List<VoronoiPoint> PoissantSamplePoints(int maxDist, float distBetween, float maxDistIncrease, int maxTries)
         {
             bool[,] closeToPoint = new bool[width, height];
             VoronoiPoint StartPoint = new(new(width / 2, height / 2), 0, -1, 0);
@@ -434,6 +490,17 @@ namespace Program
 
             }
             return PointList;
+        }
+        
+        public void DrawHexagon(Coord pos, int radius, int value)
+        {
+            for(int X = pos.X - radius; X <= pos.X + radius; X++)
+            {
+                for (int Y = pos.Y - radius; Y <= pos.Y + radius; Y++)
+                {
+                    if (pos.DistHex(new(X, Y)) <= radius) this[X, Y] = value;
+                }
+            }
         }
     }
 }
