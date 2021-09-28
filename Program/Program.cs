@@ -10,20 +10,24 @@ namespace Program
     {
         static void Main()
         {
-            
             int width = 180;
             int height = 150;
             HexGrid grid = new(width, height);
-            grid.GenerateVoronoiRooms(60, 10, 1f, 50);
+            grid.GenerateVoronoiRooms(60, 12, 1f, 50);
             grid.MakeCaverns(51, 4, 8);
             grid.Export("output//Map.png");
             /****/
-            //Console.ReadKey();
+            Console.WriteLine("Done. Press any key to close window");
+            Console.ReadKey();
         }
     }
 
     class HexGrid : Grid
     {
+        public void SetAllValues(int value)
+        {
+            for (int x = 0; x < width; x++) for (int y = 0; y < height; y++) this[x, y] = value;
+        }
         public bool[,] addedToRegion;
         public HexGrid(int _width, int _height) : base(_width, _height)
         {
@@ -32,6 +36,7 @@ namespace Program
         public void MakeCaverns(int infill, int smoothingSteps, int minRoomSize)
         {
             Randomize(infill);
+            //Console.WriteLine("randomized outer regions");
             Process(smoothingSteps, minRoomSize);
         }
         public void Randomize(int percentFilled)
@@ -53,6 +58,7 @@ namespace Program
             {
                 Smooth();
             }
+            //Console.WriteLine("smoothed caverns");
             //Export("output//SmoothedMap.png");
             //find all regions; remove small ones; then connect the remaining ones
             List<Region> roomRegions = GetRegionsOfType(0);
@@ -71,7 +77,7 @@ namespace Program
                     bigRooms.Add(new List<Region> { room });
                 }
             }
-
+            Console.WriteLine("found {0} big rooms", bigRooms.Count);
             //TODO: connect inner cell rooms with each other and make connections with outside
             //will do this operation in make voronoi rooms
             ConnectAllRegions(bigRooms);
@@ -181,10 +187,10 @@ namespace Program
         {
             while (ClustersToConnect.Count > 1)
             {
+                Console.WriteLine("{0} clusters left", ClustersToConnect.Count);
                 int bestDistance = -1;
                 bool connectionFound = false;
                 List<Region> bestClusterA = new(), bestClusterB = new();
-                Region BRA = new(), BRB = new();
                 Coord bestTileA = new(), bestTileB = new();
                 for (int cA = 0; cA < ClustersToConnect.Count; cA++)
                 {
@@ -205,8 +211,6 @@ namespace Program
                                         {
                                             bestClusterA = clusterA;
                                             bestClusterB = clusterB;
-                                            BRA = roomA;
-                                            BRB = roomB;
                                             bestTileA = tileA;
                                             bestTileB = tileB;
                                             bestDistance = distanceBetweenRooms;
@@ -225,20 +229,15 @@ namespace Program
                     bestClusterA.AddRange(bestClusterB);
                     ClustersToConnect.Add(bestClusterA);
                     DrawLine(bestTileA, bestTileB);
-                    if (BRA.isVoronoi && BRB.isVoronoi)
-                    {
-                        voronoiCells[BRA.cellID].neighbors.Add(BRB.cellID);
-                        voronoiCells[BRB.cellID].neighbors.Add(BRA.cellID);
-                    }
                 }
             }
         }
-        public void DrawLine(Coord from, Coord to, int value = 0)
+        public void DrawLine(Coord from, Coord to, int value = 0, int thickness = 1)
         {
             List<Coord> line = GetLine(from, to);
             foreach (Coord coord in line)
             {
-                this[coord] = value;
+                DrawHexagon(coord, (thickness - 1) / 2, value, thickness % 2 == 0);
             }
         }
         public static List<Coord> GetLine(Coord from, Coord to)
@@ -445,10 +444,56 @@ namespace Program
                     cellClusters.Remove(bestClusterB);
                     bestClusterA.AddRange(bestClusterB);
                     cellClusters.Add(bestClusterA);
-                    DrawLine(voronoiCells[bestCellAID].Origin.position, voronoiCells[bestCellBID].Origin.position);
+                    DrawLine(voronoiCells[bestCellAID].Origin.position, voronoiCells[bestCellBID].Origin.position, 0, 2);
                 }
             }
-
+            //Console.WriteLine("connected adjacent rooms once");
+            foreach (VoronoiCell cell in voronoiCells)
+            {
+                //Console.WriteLine("checking cell {0}/{1}", cell.Origin.ID + 1, voronoiCells.Count);
+                if (cell.isBorder) continue;
+                int[,] distances = Dijkstra(cell.Origin.position);
+                double ratio = -1;
+                int bestDistID = -1;
+                foreach (int neighborID in cell.neighbors)
+                {
+                    if (voronoiCells[neighborID].isBorder) continue;
+                    int x = voronoiCells[neighborID].Origin.position.X, y = voronoiCells[neighborID].Origin.position.Y;
+                    double newRatio = distances[x, y] / cell.Origin.position.DistDir(voronoiCells[neighborID].Origin.position);
+                    if (newRatio > ratio)
+                    {
+                        ratio = newRatio;
+                        bestDistID = neighborID;
+                    }
+                }
+                if (ratio > 3.5)
+                {
+                    DrawLine(cell.Origin.position, voronoiCells[bestDistID].Origin.position, 0, 2);
+                    Console.WriteLine("connecting cells {0} and {1}", cell.Origin.ID, bestDistID);
+                }
+            }
+            for (int i = 0; i < 2; i++)
+            {
+                int[,] distances = Dijkstra(voronoiCells[0].Origin.position);
+                double ratio = -1;
+                int bestDistID = -1;
+                foreach (int neighborID in voronoiCells[0].neighbors)
+                {
+                    if (voronoiCells[neighborID].isBorder) continue;
+                    int x = voronoiCells[neighborID].Origin.position.X, y = voronoiCells[neighborID].Origin.position.Y;
+                    double newRatio = distances[x, y] / voronoiCells[0].Origin.position.DistDir(voronoiCells[neighborID].Origin.position);
+                    if (newRatio > ratio)
+                    {
+                        ratio = newRatio;
+                        bestDistID = neighborID;
+                    }
+                }
+                if (ratio > 1.7)
+                {
+                    DrawLine(voronoiCells[0].Origin.position, voronoiCells[bestDistID].Origin.position, 0, 2);
+                    Console.WriteLine("connecting cells {0} and {1}", voronoiCells[0].Origin.ID, bestDistID);
+                }
+            }
         }
         public List<VoronoiPoint> PoissantSamplePoints(int maxDist, float distBetween, float maxDistIncrease, int maxTries)
         {
@@ -471,7 +516,7 @@ namespace Program
                 double radius = (rand.NextDouble() * maxDistIncrease + 1) * (distBetween);
                 double angle = rand.NextDouble() * Math.PI * 2;
                 Coord next = (from.position.Cubic + new Coord(radius, angle).Cubic).InGrid;
-                bool invalidPoint = closeToPoint[next.X, next.Y] || (next.DistHex(StartPoint.position) > maxDist);
+                bool invalidPoint = ((InMap(next) && closeToPoint[next.X, next.Y]) || (next.DistHex(StartPoint.position) > maxDist));
                 if (invalidPoint) fails++;
                 else
                 {
@@ -491,14 +536,60 @@ namespace Program
             }
             return PointList;
         }
-        
-        public void DrawHexagon(Coord pos, int radius, int value)
+        public int[,] Dijkstra(List<Coord> from)
         {
-            for(int X = pos.X - radius; X <= pos.X + radius; X++)
-            {
-                for (int Y = pos.Y - radius; Y <= pos.Y + radius; Y++)
+            int[,] map = new int[width, height];
+            bool[,] reached = new bool[width, height];
+            Queue<Coord> queue = new();
+            for (int x = 0; x < width; x++) for (int y = 0; y < height; y++)
                 {
-                    if (pos.DistHex(new(X, Y)) <= radius) this[X, Y] = value;
+                    map[x, y] = -1;
+                    reached[x, y] = false;
+                }
+            foreach (Coord coord in from)
+            {
+                queue.Enqueue(coord);
+                map[coord.X, coord.Y] = 0;
+                reached[coord.X, coord.Y] = true;
+            }
+            while (queue.Count > 0)
+            {
+                Coord coord = queue.Dequeue();
+                foreach (Coord neighbor in coord.Neighbors)
+                {
+                    if (InMap(neighbor) && !reached[neighbor.X, neighbor.Y] && this[neighbor] != 1)
+                    {
+                        if (map[neighbor.X, neighbor.Y] == -1)
+                        {
+                            queue.Enqueue(neighbor);
+                            map[neighbor.X, neighbor.Y] = map[coord.X, coord.Y] + 1;
+                        }
+                        if (map[neighbor.X, neighbor.Y] > map[coord.X, coord.Y] + 1)
+                            map[neighbor.X, neighbor.Y] = map[coord.X, coord.Y] + 1;
+                    }
+                }
+                reached[coord.X, coord.Y] = true;
+            }
+            return map;
+        }
+        public int[,] Dijkstra(Coord from) => Dijkstra(new List<Coord> { from });
+        public void DrawHexagon(Coord pos, int radius, int value, bool nudge = false)
+        {
+            //Console.WriteLine("nudge: {0}", nudge);
+            for(int X = pos.X - radius - (nudge ? 1 : 0); X <= pos.X + radius + (nudge ? 1 : 0); X++)
+            {
+                for (int Y = pos.Y - radius - (nudge ? 1 : 0); Y <= pos.Y + radius + (nudge ? 1 : 0); Y++)
+                {
+                    //Console.WriteLine("({0},{1}): {2}", X, Y, pos.DistHex(new(X, Y)));
+                    if (pos.DistHex(new(X, Y)) <= radius)
+                        this[X, Y] = value;
+                    else if (nudge)
+                    {
+                        //Console.WriteLine("distance to neighbor 1 is {0}", pos.Neighbors[0].DistHex(new(X, Y)));
+                        //Console.WriteLine("distance to neighbor 2 is {0}", pos.Neighbors[1].DistHex(new(X, Y)));
+                        if (pos.Neighbors[0].DistHex(new(X, Y)) <= radius || pos.Neighbors[1].DistHex(new(X, Y)) <= radius)
+                            this[X, Y] = value;
+                    }
                 }
             }
         }
